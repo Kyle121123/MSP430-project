@@ -1,0 +1,31 @@
+//This code was used to take a raw analog heart rate signal and convert it into a digital signal, to eventually be processed
+#include <msp430.h>
+int main(void)
+{
+WDTCTL = WDTPW + WDTHOLD;
+P1DIR |= BIT0; //Set the output at P1.0 for the LED
+ADC10CTL0 |= ADC10ON + ADC10IE; //BIT4 turns on ADC. BIT 3 Enables interupt, P1.3 is our input V pin
+ADC10CTL1 |= INCH_1; // Sets the input signal from A1.
+ADC10AE0 |= BIT1;
+//Cause the LED to blink from the sample
+for(;;)
+{
+	ADC10CTL0 |= ENC + ADC10SC;
+	__bis_SR_register(CPUOFF + GIE); //Put in LPM0
+}
+}
+#pragma vector=ADC10_VECTOR
+__interrupt void ADC10_ISR(void)
+{
+	//Clear the flag for obtaining a value, done automatically
+	ADC10CTL0 |= ~ADC10IFG;
+	if(ADC10MEM < 205) // Comparing the analog signal with a digital one 1023/5 ... 204.6
+	{
+		P1OUT &= ~BIT0;
+	}
+		else
+		{
+		P1OUT |= BIT0;
+		}
+	__bis_SR_register_on_exit(CPUOFF); //Put in LPM0
+}
