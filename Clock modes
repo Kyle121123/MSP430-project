@@ -1,0 +1,31 @@
+//The following code was used to modify the MSP430 clocks for low power applications
+#include <msp430.h>
+int main(void)
+{
+WDTCTL = WDTPW +WDTHOLD; // Stop Watchdog Timer
+	 P1DIR |= BIT0 | BIT4 | BIT1;
+	 P1SEL |= BIT0 | BIT4;
+　
+while(1)
+{
+P1OUT |= 0x02; 	 // P1.1 = 1
+P1OUT &= ~0x02; // P1.1 = 0
+}
+}
+
+#include <msp430.h>
+int main(void)
+{
+WDTCTL = WDTPW +WDTHOLD; // Stop Watchdog Timer
+	 P1DIR |= BIT0 | BIT4 | BIT1;
+	 P1SEL |= BIT0 | BIT4;
+　
+	 BCSCTL1 |= BIT4; // ACLK Divider by 2
+	 BCSCTL2 |= BIT2; // SMCLK Divider by 4
+	 __bis_SR_register(LPM4_bits + GIE);
+　
+while(1)
+{
+P1OUT |= 0x02; 	 // P1.1 = 1
+P1OUT &= ~0x02; // P1.1 = 0
+}
