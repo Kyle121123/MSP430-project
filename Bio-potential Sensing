@@ -1,0 +1,80 @@
+//This code was used to 
+Now that we have learned concepts such as interrupts, ADC’s and wireless communication, it was time to incorporate these concepts to get her
+in a single project. We were tasked to implement bio-potential sensing of ECG leads on the MSP430 and wirelessly transmit this data to 
+the computer terminal and output the ECG signal. The interrupts were used to keep the MSP430 in low power mode and allow for immediate 
+task selection. The ADC was used to acquire the ECG signal from the sparkfun heartrate chip and convert it into a digital signal that 
+can be wirelessly transmitted. Then, due to the fact that using the system directly from the computer is dangerous, the signal was 
+transmitted through bluetooth to the computer to be processed and outputted. Hence, the purpose of this lab was to incorporate the 
+knowledge we have learned from the previous labs to make a ECG heart rate monitor. 
+
+#include <msp430.h>
+//SETUP OUR CLK CYCLES
+int start;
+int B;
+int A;
+/*
+* main.c
+*/
+int main(void) {
+WDTCTL = WDTPW | WDTHOLD;	// Stop watchdog timer
+// TACTL |= TASSEL_2 + MC_2; // SMCLK is Timer A source, and counts continuously. Timer A will be used for ADC sampling rate
+// ADC Setup
+ADC10CTL0 |= ADC10ON + ADC10IE; //BIT4 turns on ADC. BIT 3 Enables interupt
+ADC10CTL1 |= INCH_0 + ADC10SSEL_3; // Sets the input signal from A0. Sets SMCLK as the ADC clk source. 
+ADC10AE0 |= BIT0;
+　
+// UART Setup
+if(CALBC1_1MHZ==0xFF)
+{
+while(1);
+}
+DCOCTL = 0;
+BCSCTL1 = CALBC1_1MHZ; // Set DCO
+DCOCTL = CALDCO_1MHZ;
+P1SEL = BIT1 + BIT2 ; // P1.1 = RXD, P1.2=TXD
+P1SEL2 = BIT1 + BIT2;
+UCA0CTL1 |= UCSSEL_2; // SMCLK
+UCA0BR0 = 8; // 1MHz 115200
+UCA0BR1 = 0; // 1MHz 115200
+UCA0MCTL = UCBRS2 + UCBRS0; // Modulation UCBRSx = 5
+UCA0CTL1 &= ~UCSWRST; // **Initialize USCI state machine**
+IE2 |= UCA0RXIE; // Enable USCI_A0 RX interrupt
+__bis_SR_register(LPM0_bits + GIE); // Enter LPM0, interrupts enable
+while(1)
+{
+	if (start == 1)
+	{
+	//Sending integers this time
+		ADC10CTL0 |= ENC + ADC10SC; // enable and start the ADC10
+		__bis_SR_register(LPM0_bits + GIE); // Enter LPM0, interrupts enable
+	while (!(IFG2&UCA0TXIFG));
+		UCA0TXBUF = B;
+	while (!(IFG2&UCA0TXIFG));
+		UCA0TXBUF = A;
+		__delay_cycles(1000);
+	}
+}
+　
+	return 0;
+}
+#pragma vector=USCIAB0RX_VECTOR
+__interrupt void USCI0RX_ISR(void)
+{ // check that you receive "a"
+if(UCA0RXBUF == 'a')
+{
+	start = 1;
+}
+// exit LPM
+__low_power_mode_off_on_exit();
+}
+//This is used everytime a new sample is converted
+#pragma vector=ADC10_VECTOR
+__interrupt void ADC10_ISR(void)
+{
+//ADC10MEM has the value that we need.
+A = ADC10MEM;
+B = A >> 8;
+//UCA0TXBUF takes an 8-bit value
+ADC10CTL0 |= ~ADC10IFG;
+__low_power_mode_off_on_exit();
+// EXIT LPM
