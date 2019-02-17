@@ -1,0 +1,367 @@
+include <msp430.h>
+//The purpose of part 1 is to measure the ECG signal, calculate the heart rate, and transmit this data to the computer
+/*
+* main.c
+*/
+int current = 0;//Current value of the ADC10MEM
+int count = 0;//The number of peaks in the ECG signal
+int start;
+int B;
+int A;
+int peak;
+int prev = 322;
+int heartRate = 0;
+int checker = 322;
+int time = 0;
+int timerV = 0;
+
+int main(void)
+{
+WDTCTL = WDTPW | WDTHOLD; // Stop watchdog timer
+P1DIR |= BIT6;
+P1OUT &= ~BIT6;
+
+//Setting up the ADC10, same as lab6
+
+ADC10CTL0 |= ADC10ON + ADC10IE; //BIT4 turns on ADC. BIT 3 Enables interupt, P1.0/A0 is our input pin, REFON turns om the reference voltage, REF2_5v makes it 2.5V
+ADC10CTL1 |= INCH_3; // Sets the input signal from A0. Sets SMCLK as the main clk source.
+ADC10AE0 |= BIT3; //Analog input enabled
+
+//TimerA Steup
+//Using upmode, sourcing ACLK to 32,768kHz
+TACTL |= TASSEL_1;//sources ACLK, Upmode setting
+
+// UART Setup
+
+if(CALBC1_1MHZ==0xFF)
+{
+
+while(1);
+
+}
+
+DCOCTL = 0;
+BCSCTL1 = CALBC1_1MHZ; // Set DCO
+DCOCTL = CALDCO_1MHZ;
+P1SEL = BIT1 + BIT2 ; // P1.1 = RXD, P1.2=TXD
+P1SEL2 = BIT1 + BIT2;
+UCA0CTL1 |= UCSSEL_2; // SMCLK
+UCA0BR0 = 8; // 1MHz 115200
+UCA0BR1 = 0; // 1MHz 115200
+UCA0MCTL = UCBRS2 + UCBRS0; // Modulation UCBRSx = 5
+UCA0CTL1 &= ~UCSWRST; // **Initialize USCI state machine**
+IE2 |= UCA0RXIE; // Enable USCI_A0 RX interrupt
+__bis_SR_register(LPM0_bits + GIE); // Enter LPM0, interrupts enable
+
+while(1)
+
+{
+if (start == 1)
+{
+
+//Sending integers this time
+ADC10CTL0 |= ENC + ADC10SC; // enable and start the ADC10
+__bis_SR_register(LPM0_bits + GIE); // Enter LPM0, interrupts enable
+
+//ADC10MEM has the value that we need.
+A = ADC10MEM; //First 8 values
+B = A >> 8; //B is MSB
+//Implement the algorithm we calculated in class for peak counts
+
+current = ADC10MEM;
+if(current < 322){
+
+if(current < prev){
+
+peak = current;// The previous value to be compared
+prev = current;
+checker = prev;
+
+
+}
+
+if(prev < current && prev == checker)
+
+{
+
+P1OUT ^= BIT6;
+timerV = TAR; //
+heartRate = 1966080/timerV; //converting.
+TACTL |= TACLR+MC_2; // reset counter + stoptimer
+checker = 0;
+prev = 322;
+
+}
+
+}
+
+while (!(IFG2&UCA0TXIFG));
+
+UCA0TXBUF = B;
+
+while (!(IFG2&UCA0TXIFG));
+
+UCA0TXBUF = A;
+
+while(!(IFG2&UCA0TXIFG));
+
+UCA0TXBUF = heartRate;
+
+__delay_cycles(5000);
+
+}
+
+}
+
+return 0;
+
+}
+
+#pragma vector=USCIAB0RX_VECTOR
+__interrupt void USCI0RX_ISR(void)
+{ // check that you receive "a"
+
+if(UCA0RXBUF == 'a')
+
+{
+
+start = 1;
+
+}
+
+// exit LPM
+
+__bic_SR_register_on_exit(CPUOFF);
+
+}
+
+//This is used everytime a new sample is converted
+
+#pragma vector=ADC10_VECTOR
+__interrupt void ADC10_ISR(void)
+{
+__bic_SR_register_on_exit(CPUOFF);
+// EXIT LPM
+
+//Part 2
+Part 2 Code:
+
+High Pass Filter:
+#include <msp430.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdint.h>
+#define order 6
+/*
+* main.c
+*/
+int i, n;
+int signalLSB;
+int signalMSB;
+double filterLSB;
+double filterMSB;
+int timeLSB;
+int timeMSB;
+int LSBflag = 0;
+int timer = 0;
+double hPF = 0;
+int sampleRate = 360;
+int Combined;
+// Low Pass Filter
+//History of outputs for low pass filter for each channel
+//First order high pass filter implementation
+double xPrevHP = 0; //Previous input
+double yPrevHP = 0; //Previous output
+　
+double highPassFilter(double input)
+{
+	double cutoff = 0.5; //Cut-off frequency
+	//calculate coefficents
+	double delta_t = 1.0 / sampleRate; //sample interval is 1/current sample rate
+	double alpha = cutoff / (cutoff + delta_t);
+	//perform HPF
+	double yout = alpha * (yPrevHP + input - xPrevHP);
+	//update state variables
+	xPrevHP = input;
+	yPrevHP = yout;
+	return yout;
+}
+int main(void)
+{
+WDTCTL = WDTPW | WDTHOLD; // Stop watchdog timer
+// UART Setup
+if(CALBC1_1MHZ==0xFF)
+{
+while(1);
+}
+DCOCTL = 0;
+BCSCTL1 = CALBC1_1MHZ; // Set DCO
+DCOCTL = CALDCO_1MHZ;
+P1SEL = BIT1 + BIT2 ; // P1.1 = RXD, P1.2=TXD
+P1SEL2 = BIT1 + BIT2;
+UCA0CTL1 |= UCSSEL_2; // SMCLK
+UCA0BR0 = 104; // 1MHz 9600
+UCA0BR1 = 0; // 1MHz 9600
+UCA0MCTL = UCBRS0; // Modulation UCBRSx = 5
+UCA0CTL1 &= ~UCSWRST; // **Initialize USCI state machine**
+IE2 |= UCA0RXIE; // Enable USCI_A0 RX interrupt
+__bis_SR_register(LPM0_bits + GIE); // Enter LPM0, interrupts enable
+// Timer setup
+TACTL |= TASSEL_2; // SMCLK divided by 4, continious mode!
+　
+while(1)
+{
+	//timer start
+	TACTL |= MC_2 + ID_2;
+	Combined = signalLSB + signalMSB;
+	hPF = highPassFilter((double) Combined);
+	//timer stops
+	timeLSB = TAR; // save value of timer
+	TACTL |= MC_0; // stop timer
+	TACTL = TACLR; // clear timer
+　
+　
+　
+while (!(IFG2&UCA0TXIFG));
+UCA0TXBUF = (int)hPF;
+		//filterLSB;
+while (!(IFG2&UCA0TXIFG));
+UCA0TXBUF = (int)hPF >> 8;
+		//filterMSB;
+while(!(IFG2&UCA0TXIFG));
+UCA0TXBUF = timeLSB;
+			//timerLSB
+while(!(IFG2&UCA0TXIFG));
+UCA0TXBUF = timeLSB >> 8;
+			//timerMSB
+__bis_SR_register(LPM0_bits + GIE); // Enter LPM0, interrupts enable
+}
+}
+#pragma vector=USCIAB0RX_VECTOR
+__interrupt void USCI0RX_ISR(void)
+{
+if (LSBflag == 0)
+{
+	signalLSB = UCA0RXBUF;
+	LSBflag = 1;
+}
+else
+		{
+	signalMSB = UCA0RXBUF << 8;
+	LSBflag = 0;
+	__bic_SR_register_on_exit(CPUOFF);
+		}
+　
+}
+
+Low Pass Filter:
+#include <msp430.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdint.h>
+#define order 6
+/*
+* main.c
+*/
+int i, n;
+int signalLSB;
+int signalMSB;
+double filterLSB;
+double filterMSB;
+int timeLSB;
+int timeMSB;
+int LSBflag = 0;
+int timer = 0;
+double lPF = 0;
+int Combined;
+// Low Pass Filter
+//History of outputs for low pass filter for each channel
+double xValues[order+1] = {0};
+double yValues[order+1] = {0};
+double aCoeff[] = {1,-4.65261339186391,9.14112947874648,-9.68872072337630,5.83446402896588,-1.89059959898871,0.257315928152397};
+double bCoeff[] = {1.52456505599146e-05,9.14739033594878e-05,0.000228684758398720,0.000304913011198293,0.000228684758398720,9.14739033594878e-05,1.52456505599146e-05};
+double lowPassFilter(double input)
+{
+	for(i = 0; i<order; i++)
+	{
+		xValues[i] = xValues[i+1];
+		yValues[i] = yValues[i+1];
+	}
+	xValues[order] = input;
+	yValues[order] = xValues[order] * bCoeff[0];
+	for (n = 2; n <= order+1; n++)
+	{
+		yValues[order] = yValues[order] + xValues[order - n + 1] * bCoeff[n - 1] - yValues[order - n + 1] * aCoeff[n - 1];
+	}
+	return yValues[order];
+}
+　
+int main(void)
+{
+WDTCTL = WDTPW | WDTHOLD; // Stop watchdog timer
+// UART Setup
+if(CALBC1_1MHZ==0xFF)
+{
+while(1);
+}
+DCOCTL = 0;
+BCSCTL1 = CALBC1_1MHZ; // Set DCO
+DCOCTL = CALDCO_1MHZ;
+P1SEL = BIT1 + BIT2 ; // P1.1 = RXD, P1.2=TXD
+P1SEL2 = BIT1 + BIT2;
+UCA0CTL1 |= UCSSEL_2; // SMCLK
+UCA0BR0 = 104; // 1MHz 9600
+UCA0BR1 = 0; // 1MHz 9600
+UCA0MCTL = UCBRS0; // Modulation UCBRSx = 5
+UCA0CTL1 &= ~UCSWRST; // **Initialize USCI state machine**
+IE2 |= UCA0RXIE; // Enable USCI_A0 RX interrupt
+__bis_SR_register(LPM0_bits + GIE); // Enter LPM0, interrupts enable
+// Timer setup
+TACTL |= TASSEL_2; // SMCLK divided by 4, continious mode!
+　
+while(1)
+{
+	//timer start
+	TACTL |= MC_2 + ID_2;
+	Combined = signalLSB + signalMSB;
+	lPF = lowPassFilter((double) Combined);
+	//timer stops
+	TACTL |= MC_0;
+	//save the timer time
+	timeLSB = TAR;
+	//reset the timer
+	TACTL = TACLR;
+　
+　
+　
+while (!(IFG2&UCA0TXIFG));
+UCA0TXBUF = (int)lPF;
+		//filterLSB;
+while (!(IFG2&UCA0TXIFG));
+UCA0TXBUF = (int)lPF >> 8;
+		//filterMSB;
+while(!(IFG2&UCA0TXIFG));
+UCA0TXBUF = timeLSB;
+			//timerLSB
+while(!(IFG2&UCA0TXIFG));
+UCA0TXBUF = timeLSB >> 8;
+			//timerMSB
+__bis_SR_register(LPM0_bits + GIE); // Enter LPM0, interrupts enable
+}
+}
+#pragma vector=USCIAB0RX_VECTOR
+__interrupt void USCI0RX_ISR(void)
+{ // check that you receive "a"
+if (LSBflag == 0)
+{
+	signalLSB = UCA0RXBUF;
+	LSBflag = 1;
+}
+else
+		{
+	signalMSB = UCA0RXBUF << 8;
+	LSBflag = 0;
+	__bic_SR_register_on_exit(CPUOFF);
+		}
+　
+}
