@@ -1,0 +1,87 @@
+Polling solution:
+#include <msp430.h> 
+
+/*
+ * main.c
+ */
+int main(void) {
+    WDTCTL = WDTPW + WDTHOLD;	// Stop watchdog timer
+
+    P1DIR |= BIT0; //Initialaizng the output to just at P1.0 to illuminate the LED
+    P1REN |= BIT3;// We need a pullup resistor because LED turns off when button is pressed
+    P1OUT |= BIT0;
+    P1OUT |= BIT3; // Button is pull-down naturally.
+
+    // While infinite loop will allow us to toggle the LED on or off
+    while(1){
+//If button pressed, turn off the LED
+    	if((P1IN & BIT3)==0){
+    		P1OUT ^= BIT0;
+    	}
+    }
+
+
+	
+	return 0;
+}
+Interrupt Solution:
+#include <msp430.h> 
+
+/*
+ * main.c
+ */
+int main(void) {
+    WDTCTL = WDTPW + WDTHOLD;	// Stop watchdog timer
+
+
+    P1DIR |= BIT0; //Initialaizng the output to just at P1.0 to illuminate the LED
+    P1REN |= BIT3;// We need a pullup resistor because LED turns off when button is pressed
+    P1OUT |= BIT0;
+    P1OUT |= BIT3; // Button is pull-down naturally.
+    P1IE |= BIT3; // Interrupt is enabled regarding button
+
+
+    __bis_SR_register(LPM4_bits + GIE);
+
+}
+
+//Port 1 interrupt service routine
+#pragma vector=PORT1_VECTOR
+__interrupt void PORT_1(void)
+{
+	   P1OUT ^= BIT0;
+	   P1IFG = BIT7;
+
+}
+Bonus Debouncing Solution:
+#include <msp430.h> 
+
+/*
+ * main.c
+ */
+int main(void) {
+    WDTCTL = WDTPW + WDTHOLD;	// Stop watchdog timer
+
+
+    P1DIR |= BIT0; //Initialaizng the output to just at P1.0 to illuminate the LED
+    P1REN |= BIT3;// We need a pullup resistor because LED turns off when button is pressed
+    P1OUT |= BIT0;
+    P1OUT |= BIT3; // Button is pull-down naturally.
+    P1IE |= BIT3; // Interrupt is enabled regarding button
+
+
+    __bis_SR_register(LPM4_bits + GIE);
+
+}
+
+//Port 1 interrupt service routine
+#pragma vector=PORT1_VECTOR
+__interrupt void PORT_1(void)
+{
+	__delay_cycles(100000);
+	   P1OUT ^= BIT0;
+	   P1IFG = BIT7;
+
+}
+
+	
